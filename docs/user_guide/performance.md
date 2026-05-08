@@ -72,7 +72,7 @@ The following additional flags can help with insights and result interpretation:
 
 When running benchmarks, all requests typically use the same `max-tokens` value (the maximum number of output tokens for a request). This value can be set using [`--output-len`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-output-len). For the `custom` dataset (`--dataset-name custom`), if the dataset contains per-request output token counts as shown in the [Custom dataset documentation](https://docs.vllm.ai/en/stable/api/vllm/benchmarks/datasets/#vllm.benchmarks.datasets.CustomDataset), you can load the per-request `max-tokens` using `--custom-output-len -1`. Paired with `--ignore-eos` (which tells the model to ignore the EOS token and always generate exactly `max-tokens` tokens), this makes benchmarks more stable and reproducible, since the number of output tokens is fixed across runs. Without this, output length varies across runs — even at temperature 0.0, unless using [batch invariance](https://docs.vllm.ai/en/latest/features/batch_invariance/#batch-invariance) — making results more variable and difficult to interpret.
 
-!!! danger
+!!! warning
 
     Using `--custom-output-len -1` paired with `--ignore-eos` has important implications:
 
