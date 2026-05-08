@@ -1,18 +1,21 @@
 # Benchmarking and Performance
 
-This page describes the recommended benchmarking methodology for SenDNN Inference, and provide some guidance to help tuning the performance. In addition to providing useful suggestions, we aim at providing a strong background to understand and interpret the results.
+This page describes the recommended benchmarking methodology for SenDNN Inference and provides guidance for tuning performance. In addition to practical suggestions, it aims to give a solid background for understanding and interpreting results.
 
 ## Running Benchmarks
 
-Currently the recommended tool for performance benchmarking is the [vLLM bench CLI tool](https://docs.vllm.ai/en/stable/benchmarking/cli/) automatically present in the installation. In particular, we will detail the utilization of [`vllm bench serve`](https://docs.vllm.ai/en/stable/benchmarking/cli/#online-benchmark) which evaluates end-to-end performance in a serving context, suited for evaluating production-like deployment scenarios.
+The recommended tool for performance benchmarking is the [vLLM bench CLI tool](https://docs.vllm.ai/en/stable/benchmarking/cli/), which is automatically included in the installation. In particular, we detail the use of [`vllm bench serve`](https://docs.vllm.ai/en/stable/benchmarking/cli/#online-benchmark), which evaluates end-to-end performance in a serving context and is well-suited for production-like deployment scenarios.
 
 ??? tip
-    There are other vLLM benchmarking commands worth using as well, such as [`vllm bench throughput`](https://docs.vllm.ai/en/stable/benchmarking/cli/#offline-throughput-benchmark) for measuring offline inference throughput, or [`vllm bench sweep`](https://docs.vllm.ai/en/stable/benchmarking/sweeps/) which runs `vllm bench serve` across different parameter configurations, enabling comparison of different settings. 
-    
-    For multimodal models benchmarking, there are multiple ways to go:
+    There are other vLLM benchmarking commands worth using as well:
 
-    - `vllm bench serve` with a custom multimodal (`custom_mm`) or a random multimodal (`random_mm`) dataset see [documentation](https://docs.vllm.ai/en/stable/cli/bench/serve/#-dataset-name)
-    - `vllm bench mm-processor` which specifically profiles the multimodal input processor pipeline
+    - [`vllm bench throughput`](https://docs.vllm.ai/en/stable/benchmarking/cli/#offline-throughput-benchmark) for measuring offline inference throughput
+    - [`vllm bench sweep`](https://docs.vllm.ai/en/stable/benchmarking/sweeps/) which runs `vllm bench serve` across different parameter configurations, enabling comparison of different settings
+
+    For multimodal models benchmarking, there are multiple approaches:
+
+    - `vllm bench serve` with a custom multimodal (`custom_mm`) or a random multimodal (`random_mm`) dataset — see [documentation](https://docs.vllm.ai/en/stable/cli/bench/serve/#-dataset-name)
+    - `vllm bench mm-processor` which specifically profiles the multimodal input processor pipeline in an offline fashion
 
 How to use `vllm bench serve`:
 
@@ -24,7 +27,7 @@ vllm serve \
     --max-num-seqs {max-num-seqs}
 ```
 
-See the [Supported Models](./supported_models.md) page for the supported models and their respective configuration.
+See the [Supported Models](./supported_models.md) page for supported models and their respective configuration.
 
 2. Run the benchmarking script (minimal command):
 ```
@@ -41,95 +44,99 @@ vllm bench serve \
 
 !!! note
 
-    When using the `custom` dataset, if the prompts already contains system instructions for your model, you probably want to use [`--skip-chat-template`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-skip-chat-template) to avoid applying additional system instructions on top of the existing ones.
+    When using the `custom` dataset, if the prompts already contain system instructions for your model, you probably want to use [`--skip-chat-template`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-skip-chat-template) to avoid applying additional system instructions on top of the existing ones.
 
-We these additional flags can help for more insights and better interpretation:
+The following additional flags can help with insights and result interpretation:
 
-- **`--metrics-percentiles 99,100`**: Sometimes the recorded metrics can be so skewed that the p100 value differs significantly to the p99. When this happens, the mean can be affected in a way that is non-understable without the p100. Therefore, it is good to always a good idea to always collect the max value (P100).
+- **`--metrics-percentiles 99,100`**: Sometimes recorded metrics are skewed enough that the P100 value differs significantly from P99, which distorts the mean. It is generally a good idea to collect the max value (P100).
 
-- **`--percentile-metrics ttft,tpot,itl,e2el`**: by default, not all the metrics are displayed. Here we ensure that all the metrics will be reported. The metrics description is detailed below (TODO link).
+- **`--percentile-metrics ttft,tpot,itl,e2el`**: By default, not all metrics are displayed. This flag ensures all metrics are reported. Metric descriptions are detailed [below](#metrics-description).
 
-- The results visualization plots can be useful for debugging and results interpretation
+- The result visualization plots can be useful for debugging and interpretation:
 
     !!! info
 
-        To generate these visualization, you'll need to install the plotting libraries: `uv pip install vllm[bench]`
+        To generate these visualizations, you'll need to install the plotting libraries: `uv pip install vllm[bench]`
 
-    - **Requests Statistics**: as we will explain, the number of input and output tokens of the requests greatly affect the performance. The **`--plot-dataset-stats`** flag will save a `.png` plot that shows the number of input and output tokens generated by each request. See the [vLLM Bench documentation - Dataset Statistics](https://docs.vllm.ai/en/stable/benchmarking/cli/#dataset-statistics).
-    - **Interactive Timeline** ([vLLM Bench documentation - Interactive Timeline](https://docs.vllm.ai/en/stable/benchmarking/cli/#interactive-timeline)): the flags **`--plot-timeline`** along with **`--timeline-itl-thresholds {itl1},{itl2}`** will generate an interactive `.html` that can be rendered in any modern web browser. Note that this works best for short runs with not so many requests.
+    - **Requests Statistics**: As explained below, the number of input and output tokens greatly affects performance. The **`--plot-dataset-stats`** flag saves a `.png` plot showing the number of input and output tokens for each request. See [vLLM Bench documentation — Dataset Statistics](https://docs.vllm.ai/en/stable/benchmarking/cli/#dataset-statistics).
+    - **Interactive Timeline** ([vLLM Bench documentation — Interactive Timeline](https://docs.vllm.ai/en/stable/benchmarking/cli/#interactive-timeline)): the **`--plot-timeline`** flag along with **`--timeline-itl-thresholds {itl1},{itl2}`** generates an interactive `.html` file renderable in any modern web browser. This works best for short runs with relatively few requests.
 
-- Save all the results:
-    - `--save-results`: save the results in `.json` file in addition to the printed output
-    - `--save-detailed`: save the individual recorded data for each individual request (can be useful for debugging).
+- Save all results:
+    - `--save-results`: saves results to a `.json` file in addition to the printed output
+    - `--save-detailed`: saves individual recorded data per request (useful for debugging)
     - `--result-dir {path/to/results}`: target path for output results
 
 ### `--custom-output-len -1`
 
-When running benchmarks, usually all the requests are running with the same number of `max-tokens` (the number of requested max number of output tokens for the request), which default value differs for different dataset, this value can set using [`--output-len`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-output-len). For the custom dataset however (`--dataset-name custom`), if the dataset contains the number of generated tokens for each request as shown in the [Custom dataset documentation](https://docs.vllm.ai/en/stable/api/vllm/benchmarks/datasets/#vllm.benchmarks.datasets.CustomDataset), one could load the `max-tokens` sent to the server for each individual request using `--custom-output-len -1`. Paired with `--ignore-eos`, which tells the model to ignore eos token and reach `max-tokens` for the request, we have a way to make the benchmarks to be more predictable and stable, because we have the same number of output tokens generated across runs. This is not achievable otherwise (even with temperature 0.0, unless using [batch invariance](https://docs.vllm.ai/en/latest/features/batch_invariance/#batch-invariance)), as the number of output tokens varies across runs, making the results more fluctuating.
+When running benchmarks, all requests typically use the same `max-tokens` value (the maximum number of output tokens for a request). This value can be set using [`--output-len`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-output-len). For the `custom` dataset (`--dataset-name custom`), if the dataset contains per-request output token counts as shown in the [Custom dataset documentation](https://docs.vllm.ai/en/stable/api/vllm/benchmarks/datasets/#vllm.benchmarks.datasets.CustomDataset), you can load the per-request `max-tokens` using `--custom-output-len -1`. Paired with `--ignore-eos` (which tells the model to ignore the EOS token and always generate exactly `max-tokens` tokens), this makes benchmarks more stable and reproducible, since the number of output tokens is fixed across runs. Without this, output length varies across runs — even at temperature 0.0, unless using [batch invariance](https://docs.vllm.ai/en/latest/features/batch_invariance/#batch-invariance) — making results more variable and difficult to interpret.
 
 !!! danger
 
-    Using `--custom-output-len -1` paired with `--ignore-eos` might have important implications:
+    Using `--custom-output-len -1` paired with `--ignore-eos` has important implications:
 
-    1. The `max-token` for the request is the exact number of tokens that will be generated. Therefore, the measured performance is too optimistic and doesn't reflect the "real" one that we would have when setting a larger `max-token` for all the requests. See the corresponding [section](TODO link to ### Max-output-tokens) in performance tuning below.
+    1. The `max-tokens` value is the *exact* number of tokens that will be generated. This means measured performance is optimistic and does not reflect what you would observe when setting a larger `max-tokens` value across all requests, because the scheduler doesn't need to account for a worst-case scenario. See the [Max-output-tokens](#max-output-tokens) section in performance tuning below.
 
-    2. The number of output tokens in the dataset might be very different than what the model would naturally produce, if it could decide by itself when to step (ie. not using `--ignore-eos`). Therefore, depending on model's verbosity, the performance might be very different. With this method, we kind of evaluate the inference code only, putting aside the model.
+    2. The number of output tokens in the dataset may differ significantly from what the model would naturally produce if allowed to stop at EOS. Depending on model verbosity, the performance may be very different. This method evaluates the inference stack in isolation, independent of model behavior.
 
 ## Metrics Description
 
-If the run is successful, the output result should output different metrics. We will describe those below and relate them with concepts from the [scheduling design document](For a more detailed description on how chunked prefill and prefix caching is implemented in SenDNN Inference, see the scheduling and padding design [document](../contributing/scheduler.md)).
+A successful run outputs several metrics, described below in relation to concepts from the [scheduling and padding design document](../contributing/scheduler.md).
 
 ### TTFT
 
-The time-to-first-token metric describes the time measured from sending the request from the client, until it receives the first token. Therefore, it includes the waiting time in the queue, the prefilling time, until the last chunked prefill completed. The TTFT is highly influenced by the [scheduling admission constraints](TODO link to "Admission constraints" in the scheduler file), typically if a requests's last chunked prefill gets stuck for a long time due to the volumetric or max-context-len constraint, the TTFT for this request will be very high.
+The time-to-first-token (TTFT) measures the time from when a request is sent by the client until the first token is received. It therefore includes time spent waiting in the queue and the full prefill time up to the last chunked prefill step. TTFT is heavily influenced by the [admission constraints](../contributing/scheduler.md#admission-constraints): if a request's last chunked prefill is held back for a long time — for example due to the volumetric or max-context-len constraint — the TTFT for that request, as well as the requests queued behind it, will be very high.
 
 !!! warning
 
-    The scheduling constraint consider the length of the input prompt along with the max-output-tokens. Therefore, value set for max-output-tokens has a huge impact on the TTFT and the overall performance, as soon as the max-output-tokens is high, there will be jam in the waiting queue because requests will be blocked by scheduling constraints.
+    The admission constraints consider the prompt length together with `max-output-tokens`. A high `max-output-tokens` value therefore has a large impact on TTFT and overall performance: requests are more likely to be blocked in the waiting queue, which directly increases observed TTFT values.
 
 ### ITL
 
-The inter-token-latency describes the latency measured between two consecutive tokens. Each request produces a list of itl values, for each of it's generated tokens, minus one (the first one describing the TTFT). Typically, the itl relates to the decode time at every step, but since prefill interrupts decode (we cannot run prefill and decode concurrently), a prefill directly introduces peaks in the recorded itls. This is a reason why the prefill are chunked and interleaved with decode steps.
+The inter-token latency (ITL) is the time between two consecutive output tokens. Each request produces a list of ITL values — one per generated token after the first (the first token's latency is the TTFT). ITL reflects the decode time at each step, but since prefill interrupts decode (prefill and decode cannot run concurrently), a prefill step directly introduces ITL spikes. This is why prefill is chunked and interleaved with decode steps, to mitigate the intensity of the spikes.
 
 !!! note
-    Typically chunked prefill with small chunk size will improve the ITL values: chunked prefill with a small chunk size will complete faster than a large chunked prefill. On the other hand, chunked prefill with chunk size that is too small will introduce some overhead that will hurt the overall performance.
+    Smaller chunk sizes improve ITL values: a smaller prefill chunk completes faster and causes a shorter decode interruption. On the other hand, a chunk size that is too small introduces overhead that hurts overall throughput.
 
 ### TPOT
 
-The time-per-output-tokens represents the mean time to generated the next decoded token, for a given request. Put in an anotherway, it is the mean of the itls of a request. TPOT represents better the average per-request performance, while the ITL reveal individual "peaks".
+The time-per-output-token (TPOT) is the mean time to generate the next decoded token for a given request — in other words, the mean of a request's ITL values. TPOT reflects average per-request performance, while ITL reveals individual latencies (revealing jittering and spikes).
 
 ### E2EL
 
-The end-to-end-latency is the time between submitting the request to the server and the last output tokens. This metric is not returned by default (need to set `--percentile-metrics ttft,tpot,itl,e2el`).
+The end-to-end latency (E2EL) is the time from submitting a request to the server until the last output token is received. This metric is not reported by default; use `--percentile-metrics ttft,tpot,itl,e2el` to enable it.
 
 
 ## Performance Tuning
 
-The configuration of the benchmarks will have a huge impact on the observed performance. Here we detail how to better set the different parameters for the most realistic and best performance.
+The benchmark configuration has a large impact on observed performance. This section explains how to set parameters for realistic, high-quality results.
 
 ### Max-output-tokens
 
-The [scheduling constraints](../contributing/scheduler.md#scheduling) use the total sequence length to consider admission of a request (ie. the prompt tokens + requested output tokens). If the requested output-tokens is too high, then it will more likely need to wait for more time before being admitted. Probably the most important optimization is to keep this value as low as possible, to a fraction of the number of prompt tokens.
+The [admission constraints](../contributing/scheduler.md#admission-constraints) use the total sequence length — prompt tokens plus requested output tokens — to decide whether to admit a request. A high `max-output-tokens` value increases the total sequence length, making requests wait longer before being admitted. Keeping this value as low as possible is therefore important for minimizing TTFT and improving overall throughput.
 
 ### Max-concurrency
 
-The `--max-concurrency` argument represents the maximum number of active requests that the server will handle, from the client perspective. For a max-concurrency value `n`, the client starts by sending `n` requests, then only send a new request when a previous one has finished, maintaining a constant number of active requests. In short, the `--max-concurrency` represents the number of concurrent users interacting with the server.
+The `--max-concurrency` argument sets the maximum number of active requests that the client will maintain. For a value `n`, the client starts by sending `n` requests, then sends a new request each time one completes, keeping exactly `n` in flight at all times. In short, `--max-concurrency` represents the number of concurrent users interacting with the server.
 
 ??? tip
 
-    Instead of `--max-concurrency` it is possible also to control the rate of the requests sent to the server using [`--request-rate`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-request-rate) paired with [`--burstiness`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-burstiness):
+    Instead of `--max-concurrency`, you can control the request arrival rate using [`--request-rate`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-request-rate) paired with [`--burstiness`](https://docs.vllm.ai/en/stable/cli/bench/serve/#-burstiness):
 
-    - `--request-rate`: the number request per second sent to the server. This default to infinity: all the requests are sent at once in the beginning.
-    - `--burstiness`: this is a burstiness factor ranging from 0.0 (sudden big bursts of many requests) to infinity (constant rate). The burstiness factor is used as parameter to a Gamma distribution of the latency before sending the next request to the server.
+    - `--request-rate`: number of requests per second sent to the server. Defaults to infinity (all requests are sent at the start).
+    - `--burstiness`: a factor ranging from 0.0 (extreme bursts) to infinity (perfectly constant rate), used as the parameter of a Gamma distribution over inter-request arrival times.
 
-The [volumetric constraint](TODO add link to last-chunk constraints) will prevent too many long requests from running at the same time. Depending on the distribution of the sequences lengths of the dataset, and even if compiling for a large batch size, there might never be more than a few requests running. Therefore we recommend setting `--max-concurrency` to approximately the following value: `max-volume-limit / top-percentile sequences length`. When increasing the concurrency a lot beyond this limit, the overall throughput will increase less and less, and the TTFT will explode very quickly.
+The [volumetric constraint](../contributing/scheduler.md#last-chunk-constraints) prevents too many long requests from running simultaneously. Depending on the sequence length distribution of your dataset, even when compiling for a large batch size, the actual number of concurrently running requests may be small because of this constraint. We therefore recommend setting `--max-concurrency` to approximately `max-volume-limit / top-percentile-sequence-length`. Increasing concurrency well beyond this point yields diminishing throughput gains while causing TTFT to increase sharply.
+
+!!! example
+
+    With the current max volume limit of 131,072 and sequence lengths (prompt tokens + max output tokens) up to 32,768 tokens, at most 4 requests can run when there is one long request in the batch: `4 × 32,768 = 131,072`. In this case, set `--max-concurrency` to 4, even if the model is compiled for a larger batch size.
 
 ### Num Prompts
 
-If [`--num-prompts`](https://docs.vllm.ai/en/stable/cli/bench/serve/?query=custom-output-len#-num-prompts) is set with a value that is higher than the total number of requests in the dataset, then the requests will be upsampled, meaning there will be duplicated requests. Due to prefix caching, this might artificially increase the cache hit and give a performance boost that would be misleading.
+If [`--num-prompts`](https://docs.vllm.ai/en/stable/cli/bench/serve/?query=custom-output-len#-num-prompts) is set to a value higher than the number of requests in the dataset, requests will be upsampled (i.e., duplicated). Due to prefix caching, duplicate requests will get a higher cache hit frequency than they would without upsampling, artificially inflating performance results.
 
 ### Requests Ordering
 
-By default, the requests are sent to the server out-of-order, but they can be sent in order using the [`--disable-shuffle`](https://docs.vllm.ai/en/stable/cli/bench/serve/?query=custom-output-len#-disable-shuffle) flag. 
+By default, requests are sent to the server in shuffled order. Sending them in the original order can be enabled with [`--disable-shuffle`](https://docs.vllm.ai/en/stable/cli/bench/serve/?query=custom-output-len#-disable-shuffle).
 
-This is highly workload dependent, but for some datasets, the ordering can highly affects the prefix-cache hit. For example, in multi-turn chat dataset, we expect consecutive request to share a common prefix. If the dataset contains many requests, and if those are sent shuffled, then the cache for a common prefix might get evicted before the request sharing the common prefix reaches the server, which would this time artificially decrease cache hit, and reduce performance.
+The effect of ordering on performance is highly workload-dependent. For datasets where consecutive requests share a common prefix — such as multi-turn chat — shuffling can cause a shared prefix to be evicted from the cache before the next request that needs it arrives, artificially reducing cache hit rate and degrading performance. In contrast, keeping the original order can significantly increase cache utilization.
