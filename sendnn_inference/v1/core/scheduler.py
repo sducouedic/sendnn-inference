@@ -442,8 +442,8 @@ class ChunkedPrefillSpyreScheduler(SpyreScheduler):
             chunk_lats = chunk_stats["chunk_prefill_latencies_s"] if chunk_stats else []
             chunk_starts = chunk_stats["chunk_prefill_start_times_s"] if chunk_stats else []
             prefill_busy_s = sum(chunk_lats)
-            if chunk_lats and chunk_starts and first_ts is not None:
-                prefill_elapsed_s = chunk_starts[-1] + chunk_lats[-1] - first_ts
+            if chunk_lats and chunk_starts:
+                prefill_elapsed_s = chunk_starts[-1] + chunk_lats[-1] - chunk_starts[0]
             else:
                 prefill_elapsed_s = 0.0
             # Guard against a negative result from clock jitter between the two samples.
